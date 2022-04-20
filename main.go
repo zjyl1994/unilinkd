@@ -2,7 +2,6 @@ package main
 
 import (
 	"fmt"
-	"net/http"
 	"os"
 
 	"github.com/zjyl1994/unilinkd/config"
@@ -18,7 +17,7 @@ func main() {
 		return
 	}
 	// run server
-	err = http.ListenAndServe(config.ListenAddr, server.UnilinkdServer{})
+	err = server.Run(config.ListenAddr)
 	if err != nil {
 		fmt.Fprintln(os.Stderr, err.Error())
 		return

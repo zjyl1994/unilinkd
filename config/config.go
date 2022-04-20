@@ -17,7 +17,7 @@ type configY struct {
 type linkY struct {
 	Disable bool
 	Mode    string
-	Path    string
+	Code    string
 	Url     string
 	Expire  string
 }
@@ -71,7 +71,7 @@ func LoadConf(filename string) error {
 				link.Expire = t
 			}
 		}
-		Links[v.Path] = link
+		Links[v.Code] = link
 	}
 	return nil
 }

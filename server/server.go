@@ -1,41 +1,54 @@
 package server
 
 import (
-	"fmt"
+	"io/ioutil"
 	"net/http"
 	"time"
 
-	"github.com/zjyl1994/unilinkd/config"
+	"github.com/gofiber/fiber/v2"
+	"github.com/gofiber/template/html"
+	"github.com/zjyl1994/unilinkd/asset"
+	"github.com/zjyl1994/unilinkd/handler"
 )
 
-type UnilinkdServer struct{}
+func Run(listenAddr string) error {
+	app := fiber.New(fiber.Config{
+		ServerHeader: "UniLink",
+		Views:        html.NewFileSystem(asset.HttpAssets, ".html"),
+		ErrorHandler: func(ctx *fiber.Ctx, err error) error {
+			code := http.StatusInternalServerError
+			if e, ok := err.(*fiber.Error); ok {
+				code = e.Code
+			}
+			if err := ctx.SendStatus(code); err != nil {
+				return err
+			}
+			return ctx.Render("tpl", fiber.Map{
+				"Title":   http.StatusText(code),
+				"Content": err.Error(),
+				"Time":    time.Now().Format(time.RFC3339),
+			})
+		},
+	})
 
-func (UnilinkdServer) ServeHTTP(w http.ResponseWriter, r *http.Request) {
-	if r.Method != "GET" {
-		w.WriteHeader(http.StatusMethodNotAllowed)
-		writePage(w, "Not Allowed", fmt.Sprintf("Method '%s' not allow on server.", r.Method))
-		return
+	app.Get("/", sendFile("index.html"))
+	app.Get("/favicon.ico", sendFile("favicon.ico"))
+	app.Get("/+", func(c *fiber.Ctx) error { return handler.CodeHandler(c, c.Params("+")) })
+	return app.Listen(listenAddr)
+}
+
+func sendFile(path string) func(c *fiber.Ctx) error {
+	return func(c *fiber.Ctx) error {
+		file, err := asset.Assets.Open(path)
+		if err != nil {
+			return err
+		}
+		defer file.Close()
+		data, err := ioutil.ReadAll(file)
+		if err != nil {
+			return err
+		}
+		c.Set("Content-type", http.DetectContentType(data))
+		return c.Send(data)
 	}
-	if r.URL.Path == "" || r.URL.Path == "/" {
-		w.Write(indexData)
-		return
-	}
-	link, found := config.Links[r.URL.Path]
-	if !found {
-		w.WriteHeader(http.StatusNotFound)
-		writePage(w, "Not Found", fmt.Sprintf("Path '%s' not found on server.", r.URL.Path))
-		return
-	}
-	if !link.Expire.IsZero() && time.Now().After(link.Expire) {
-		w.WriteHeader(http.StatusNotFound)
-		writePage(w, "Not Found", fmt.Sprintf("Path '%s' not found on server.", r.URL.Path))
-		return
-	}
-	proc, found := modeProc[link.Mode]
-	if !found {
-		w.WriteHeader(http.StatusNotImplemented)
-		writePage(w, "Not Implemented", fmt.Sprintf("Link mode '%s' not implemented.", link.Mode))
-		return
-	}
-	proc(w, r, link.Url)
 }
